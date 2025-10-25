@@ -96,9 +96,7 @@ function App() {
       )}
 
       {loading ? (
-        <p className="text-center mt-8 text-gray-400">
-          Loading threads...
-        </p>
+        <p className="text-center mt-8 text-gray-400">Loading threads...</p>
       ) : (
         <ThreadList threads={threads} userId={userId} />
       )}
