@@ -4,7 +4,7 @@ import Navbar from "./components/Navbar";
 import LeftSidebar from "./components/LeftSidebar";
 import CreateThread from "./components/CreateThread";
 import Home from "./components/Home";
-// import ThreadPage from "./components/ThreadPage";
+import ThreadPage from "./components/ThreadPage";
 
 function App() {
   return (
@@ -16,7 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/create-thread" element={<CreateThread />} />
-            {/* <Route path="/thread/:id" element={<ThreadPage />} /> */}
+            <Route path="/thread/:id" element={<ThreadPage />} />
           </Routes>
         </main>
       </div>
