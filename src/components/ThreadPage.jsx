@@ -405,7 +405,7 @@ export default function ThreadPage() {
               <button
                 onClick={handleSubmitComment}
                 disabled={submitting || !newComment.trim()}
-                className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                className="mt-2 px-6 py-2 text-black rounded-lg hover:bg-blue-700 disabled:cursor-not-allowed flex items-center gap-2 transition-colors bg-blue-900"
               >
                 <Send className="w-4 h-4" />
                 {submitting ? "Posting..." : "Post Comment"}

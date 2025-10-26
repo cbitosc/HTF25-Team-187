@@ -5,7 +5,7 @@ import LeftSidebar from "./components/LeftSidebar";
 import CreateThread from "./components/CreateThread";
 import Home from "./components/Home";
 import ThreadPage from "./components/ThreadPage";
-import Dashboard from './components/Dashboard';
+import Dashboard from "./components/Dashboard";
 
 // Add this route
 function App() {
@@ -19,7 +19,6 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/create-thread" element={<CreateThread />} />
             <Route path="/thread/:id" element={<ThreadPage />} />
-            
             <Route path="/user/:id/dashboard" element={<Dashboard />} />
           </Routes>
         </main>

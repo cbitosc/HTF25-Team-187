@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 export default function Sidebar({ onDashboard, onCreateThread }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,6 +36,25 @@ export default function Sidebar({ onDashboard, onCreateThread }) {
       console.error("Error fetching sidebar data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+  const navigate = useNavigate();
+
+  const handleDashboardClick = async () => {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+      if (error) throw error;
+
+      if (user) {
+        navigate(`/user/${user.id}/dashboard`);
+      } else {
+        alert("Please sign in first.");
+      }
+    } catch (error) {
+      console.error("Error navigating to dashboard:", error);
     }
   };
 
@@ -124,7 +144,7 @@ export default function Sidebar({ onDashboard, onCreateThread }) {
       >
         <div className="p-4 space-y-4">
           <button
-            onClick={onDashboard}
+            onClick={handleDashboardClick}
             className="w-full flex items-center gap-3 py-3 px-4 rounded-xl font-semibold transition-all duration-200 hover:bg-gray-100 text-gray-700 hover:text-gray-900"
           >
             <svg
