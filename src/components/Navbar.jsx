@@ -120,7 +120,7 @@ export default function Navbar({ onSearch }) {
           {/* Left: App Title */}
           <div className="flex-shrink-0">
             <h1 className="text-gray-900 text-lg font-semibold tracking-tight">
-              AI-Powered Threads
+              Threads
             </h1>
             <p className="text-gray-500 text-sm hidden md:block">
               Discussion • Summarize • Moderate
