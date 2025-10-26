@@ -209,7 +209,7 @@ export default function Home() {
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
       }}
     >
-      <main className="w-[63vw] flex-1 lg:ml-64 pt-20 pb-8 px-4">
+      <main className="w-[58vw] flex-1 lg:ml-64 pt-20 pb-8 bg-[#f3f3f3]">
         <div className="max-w-2xl">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Feed</h1>

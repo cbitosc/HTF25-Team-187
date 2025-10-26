@@ -266,7 +266,7 @@ export default function CreateThreadPage() {
       </div>
 
       <div className="max-w-4xl mx-auto relative">
-        <div className="mb-12 text-center pt-12 animate-slide-down">
+        <div className="mb-12 text-center animate-slide-down">
           <div className="text-3xl mt-12 font-bold text-gray-800 mb-3 tracking-tight">
             Create a New Thread
           </div>
@@ -275,7 +275,7 @@ export default function CreateThreadPage() {
           </p>
         </div>
 
-        <div className="h-[60vh] backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/50 p-10 space-y-8 animate-slide-up">
+        <div className="h-[75vh] backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/50 p-10 space-y-8 animate-slide-up">
           <div className="space-y-0">
             <label
               htmlFor="title"
