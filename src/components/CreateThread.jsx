@@ -238,29 +238,29 @@ export default function CreateThreadPage() {
 
   return (
     <div
-      className="bg-gradient-to-br from-[#F3F3F3] via-[#E8F4FF] to-[#F3F3F3] w-[99vw] p-6 relative overflow-hidden"
+      className="bg-gradient-to-br from-[#F3F3F3] via-[#E8F4FF] to-[#F3F3F3] w-[80vw] p-6 relative overflow-hidden"
       style={{
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
       }}
     >
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-20 w-72 h-72 bg-[#A5D0FF] opacity-20 rounded-full blur-3xl animate-float"></div>
+      <div className="absolute w-[12vw] inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-20 w-22 h-22 bg-[#A5D0FF] opacity-20 rounded-full blur-3xl animate-float"></div>
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-[#A5D0FF] opacity-15 rounded-full blur-3xl animate-float-delayed"></div>
       </div>
 
       <div className="max-w-4xl mx-auto relative">
         <div className="mb-12 text-center pt-12 animate-slide-down">
-          <h1 className="text-5xl mt-12 font-bold text-gray-800 mb-3 tracking-tight">
+          <div className="text-3xl mt-12 font-bold text-gray-800 mb-3 tracking-tight">
             Create a New Thread
-          </h1>
+          </div>
           <p className="text-xl text-gray-600">
             Share your thoughts with the community
           </p>
         </div>
 
-        <div className="backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/50 p-10 space-y-8 animate-slide-up">
-          <div className="space-y-3">
+        <div className="h-[60vh] backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/50 p-10 space-y-8 animate-slide-up">
+          <div className="space-y-0">
             <label
               htmlFor="title"
               className="text-gray-700 text-base font-semibold block"
@@ -299,7 +299,7 @@ export default function CreateThreadPage() {
               onChange={handleChange}
               rows={8}
               placeholder="Share your thoughts in detail..."
-              className="bg-white/90 border-2 border-gray-200 rounded-2xl w-full p-4 text-gray-800 text-lg placeholder-gray-400 focus:outline-none focus:border-[#A5D0FF] focus:ring-4 focus:ring-[#A5D0FF]/20 transition-all duration-300 resize-none"
+              className="bg-white/90 border-2 border-gray-200 rounded-2xl w-full h-32 p-4 text-gray-800 text-lg placeholder-gray-400 focus:outline-none focus:border-[#A5D0FF] focus:ring-4 focus:ring-[#A5D0FF]/20 transition-all duration-300"
             />
           </div>
 

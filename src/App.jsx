@@ -1,31 +1,27 @@
 import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";
-<<<<<<< Updated upstream
-import LeftSidebar from "./components/LeftSidebar"
-function App() {
-  return( 
-    <>
-  <Navbar onSearch={(query) => console.log("Search:", query)} />
-   <div className="flex pt-16">
-        <LeftSidebar />
-        
-        <main className="flex-1">
-          {/* Your content */}
-        </main>
-      </div>
-  </>
-  )
-=======
-import CreateThreadPage from "./components/CreateThread";
+import LeftSidebar from "./components/LeftSidebar";
+import CreateThread from "./components/CreateThread";
+import Home from "./components/Home";
+// import ThreadPage from "./components/ThreadPage";
 
 function App() {
   return (
-    <div>
-      (<Navbar onSearch={(query) => console.log("Search:", query)} />
-      ), (<CreateThreadPage />)
-    </div>
+    <Router>
+      <Navbar onSearch={(query) => console.log("Search:", query)} />
+      <div className="flex pt-16">
+        <LeftSidebar />
+        <main className="flex-1 p-4">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/create-thread" element={<CreateThread />} />
+            {/* <Route path="/thread/:id" element={<ThreadPage />} /> */}
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
->>>>>>> Stashed changes
 }
 
 export default App;

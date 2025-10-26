@@ -1,123 +1,278 @@
-import React, { useState } from 'react';
-import { TrendingUp, Home as HomeIcon, Menu, X, LayoutDashboard, PenSquare, Flame } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function Sidebar({ onDashboard, onCreateThread }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [trendingThreads, setTrendingThreads] = useState([]);
+  const [trendingUsers, setTrendingUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const trendingUsers = [
-    { id: 1, name: 'Sarah Chen', avatar: '👩‍💻', followers: '12.5K' },
-    { id: 2, name: 'Alex Morgan', avatar: '👨‍🎨', followers: '8.2K' },
-    { id: 3, name: 'Jamie Lee', avatar: '👩‍🔬', followers: '6.7K' },
-    { id: 4, name: 'Chris Park', avatar: '👨‍💼', followers: '5.1K' },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const trendingThreads = [
-    { id: 1, title: 'React 19 is here!', engagement: '2.3K' },
-    { id: 2, title: 'Best VS Code extensions', engagement: '1.8K' },
-    { id: 3, title: 'Tailwind vs CSS-in-JS', engagement: '1.5K' },
-    { id: 4, title: 'Remote work tips', engagement: '1.2K' },
-  ];
+  const fetchData = async () => {
+    try {
+      const { data: threads, error: threadsError } = await supabase
+        .from("threads")
+        .select("id, title, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (threadsError) throw threadsError;
+
+      const { data: users, error: usersError } = await supabase
+        .from("profiles")
+        .select("id, username, trust_score")
+        .order("trust_score", { ascending: false })
+        .limit(5);
+
+      if (usersError) throw usersError;
+
+      setTrendingThreads(threads || []);
+      setTrendingUsers(users || []);
+    } catch (error) {
+      console.error("Error fetching sidebar data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleThreadClick = (threadId) => {
+    window.location.href = `/thread/${threadId}`;
+  };
+
+  const handleCreateThread = () => {
+    window.location.href = "/create-thread";
+  };
+
+  const handleUserClick = (userId) => {
+    window.location.href = `/profile/${userId}`;
+  };
+
+  const formatEngagement = (date) => {
+    const now = new Date();
+    const created = new Date(date);
+    const diffInHours = Math.floor((now - created) / (1000 * 60 * 60));
+
+    if (diffInHours < 1) return "Just now";
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    return `${Math.floor(diffInDays / 7)}w ago`;
+  };
+
+  const getAvatarEmoji = (index) => {
+    const emojis = ["👩‍💻", "👨‍🎨", "👩‍🔬", "👨‍💼", "👩‍🚀"];
+    return emojis[index % emojis.length];
+  };
+
+  const formatTrustScore = (score) => {
+    if (!score) return "0";
+    if (score >= 1000) return `${(score / 1000).toFixed(1)}K`;
+    return score.toString();
+  };
 
   return (
     <>
-    
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="lg:hidden fixed top-20 left-4 z-40 p-2 rounded-lg bg-white text-gray-900 shadow-lg"
       >
-        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        {isOpen ? (
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        ) : (
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
+        )}
       </button>
 
-      {/* Overlay for mobile */}
-       {isOpen && (
+      {isOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30 top-16"
           onClick={() => setIsOpen(false)}
         />
-      )} 
+      )}
 
-      {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] overflow-y-auto z-40 transition-transform duration-300 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed mt-12 lg:sticky top-16 left-0 h-[calc(100vh-4rem)] overflow-y-auto z-40 transition-transform duration-300 ${
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } bg-white border-r border-gray-200 w-64`}
       >
         <div className="p-4 space-y-4">
-          {/* Home Button */}
-          {/* <button className="w-full flex items-center gap-3 py-3 px-4 rounded-xl font-semibold transition-all duration-200 bg-gray-100 hover:bg-gray-200 text-gray-900">
-            <HomeIcon className="w-5 h-5" />
-            Home
-          </button> */}
-
-          {/* Dashboard Button */}
-          <button 
+          <button
             onClick={onDashboard}
             className="w-full flex items-center gap-3 py-3 px-4 rounded-xl font-semibold transition-all duration-200 hover:bg-gray-100 text-gray-700 hover:text-gray-900"
           >
-            <LayoutDashboard className="w-5 h-5" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
+              />
+            </svg>
             Dashboard
           </button>
 
-          {/* Create New Thread Button */}
-          <button 
-            onClick={onCreateThread}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-400 hover:bg-blue-500 text-white rounded-xl font-semibold transition-colors duration-200"
+          <button
+            onClick={handleCreateThread}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-400 hover:bg-blue-500 text-gray-900 rounded-xl font-semibold transition-colors duration-200"
           >
-            <PenSquare className="w-5 h-5" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
             Create Thread
           </button>
 
-          {/* Trending Threads */}
           <div className="rounded-xl p-4 bg-gray-50">
             <div className="flex items-center gap-2 mb-3">
-              <Flame className="w-5 h-5 text-orange-500" />
-              <h3 className="font-bold text-gray-900">
-                Trending Threads
-              </h3>
+              <svg
+                className="w-5 h-5 text-orange-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
+                />
+              </svg>
+              <h3 className="font-bold text-gray-900">Trending Threads</h3>
             </div>
-            <div className="space-y-2">
-              {trendingThreads.map(thread => (
-                <div
-                  key={thread.id}
-                  className="p-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-200"
-                >
-                  <p className="font-medium text-sm truncate text-gray-900">
-                    {thread.title}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {thread.engagement} engaged
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Trending Users */}
-          <div className="rounded-xl p-4 bg-gray-50">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-5 h-5 text-blue-500" />
-              <h3 className="font-bold text-gray-900">
-                Trending Users
-              </h3>
-            </div>
-            <div className="space-y-2">
-              {trendingUsers.map(user => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-200"
-                >
-                  <div className="text-2xl">{user.avatar}</div>
-                  <div className="flex-1 min-w-0">
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="p-2 rounded-lg bg-gray-200 animate-pulse h-12"
+                  ></div>
+                ))}
+              </div>
+            ) : trendingThreads.length > 0 ? (
+              <div className="space-y-2">
+                {trendingThreads.map((thread) => (
+                  <div
+                    key={thread.id}
+                    onClick={() => handleThreadClick(thread.id)}
+                    className="p-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-200"
+                  >
                     <p className="font-medium text-sm truncate text-gray-900">
-                      {user.name}
+                      {thread.title}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {user.followers} followers
+                      {formatEngagement(thread.created_at)}
                     </p>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-2">
+                No threads yet
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl p-4 bg-gray-50">
+            <div className="flex items-center gap-2 mb-3">
+              <svg
+                className="w-5 h-5 text-blue-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                />
+              </svg>
+              <h3 className="font-bold text-gray-900">Trending Users</h3>
             </div>
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-2">
+                    <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
+                    <div className="flex-1 space-y-1">
+                      <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : trendingUsers.length > 0 ? (
+              <div className="space-y-2">
+                {trendingUsers.map((user, index) => (
+                  <div
+                    key={user.id}
+                    onClick={() => handleUserClick(user.id)}
+                    className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-gray-200"
+                  >
+                    <div className="text-2xl">{getAvatarEmoji(index)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate text-gray-900">
+                        {user.username || `User ${user.id.slice(0, 6)}`}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatTrustScore(user.trust_score)} trust score
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-2">
+                No users yet
+              </p>
+            )}
           </div>
         </div>
       </aside>
