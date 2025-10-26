@@ -118,9 +118,9 @@ export default function Navbar({ onSearch }) {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between gap-4 md:gap-8">
           {/* Left: App Title */}
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             <h1 className="text-gray-900 text-lg font-semibold tracking-tight">
-              Threads
+              <a href="/">Threads</a>
             </h1>
             <p className="text-gray-500 text-sm hidden md:block">
               Discussion • Summarize • Moderate

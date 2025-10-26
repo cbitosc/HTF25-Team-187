@@ -1,328 +1,458 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Share2, Send, Lightbulb, ThumbsUp } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { Heart, Sparkles, Lightbulb, Send, MessageSquare } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { summarizeText } from "../utils/gemini";
+import { Brain } from "lucide-react"; // optional icon
 
-export default function ThreadDetail({ threadId }) {
+export default function ThreadPage() {
+  const { id: threadId } = useParams();
   const [thread, setThread] = useState(null);
-  const [posts, setPosts] = useState([]);
-  const [newComment, setNewComment] = useState('');
+  const [comments, setComments] = useState([]);
+  const [reactions, setReactions] = useState({
+    like: 0,
+    love: 0,
+    insightful: 0,
+  });
+  const [userReactions, setUserReactions] = useState(new Set());
+  const [currentUser, setCurrentUser] = useState(null);
+  const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [aiSummary, setAiSummary] = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+
+  async function handleSummarize() {
+    try {
+      setSummarizing(true);
+      setAiSummary(null);
+
+      // Combine thread + comments text for context
+      const fullText = `
+      Title: ${thread.title}
+      Description: ${thread.description || ""}
+      Comments:
+      ${comments.map((c) => `- ${c.content}`).join("\n")}
+    `;
+
+      const summary = await summarizeText(fullText);
+
+      if (summary) {
+        setAiSummary(summary);
+      } else {
+        setAiSummary("⚠️ AI summarization failed. Try again later.");
+      }
+    } catch (error) {
+      console.error("AI summarization error:", error);
+      setAiSummary("⚠️ Failed to generate summary.");
+    } finally {
+      setSummarizing(false);
+    }
+  }
 
   useEffect(() => {
-    // Get current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    fetchThreadAndPosts();
+    if (!threadId) return;
+    loadThreadData();
+    getCurrentUser();
   }, [threadId]);
 
-  const fetchThreadAndPosts = async () => {
-    setLoading(true);
+  async function getCurrentUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setCurrentUser(user);
+  }
 
-    // Fetch thread details
-    const { data: threadData, error: threadError } = await supabase
-      .from('threads')
-      .select(`
-        *,
-        profiles:created_by (
-          username
+  async function loadThreadData() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load thread + creator
+      const { data: threadData, error: threadError } = await supabase
+        .from("threads")
+        .select(
+          `
+        id,
+        title,
+        description,
+        created_at,
+        created_by,
+        profiles:created_by (username)
+      `
         )
-      `)
-      .eq('id', threadId)
-      .single();
+        .eq("id", threadId)
+        .single();
 
-    console.log('Thread Data:', threadData);
-    console.log('Thread Error:', threadError);
-
-    if (threadError) {
-      console.error('Error fetching thread:', threadError);
-    } else {
+      if (threadError) throw threadError;
       setThread(threadData);
-    }
 
-    // Fetch posts (comments) for this thread
-    const { data: postsData, error: postsError } = await supabase
-      .from('posts')
-      .select(`
-        *,
-        profiles:author_id (
-          username
+      // Load comments with author profiles
+      const { data: commentsData, error: commentsError } = await supabase
+        .from("posts")
+        .select(
+          `
+        id,
+        content,
+        created_at,
+        author_id,
+        thread_id,
+        profiles:author_id (username, trust_score)
+      `
         )
-      `)
-      .eq('thread_id', threadId)
-      .is('parent_id', null)
-      .order('created_at', { ascending: true });
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
 
-    console.log('Posts Data:', postsData);
-    console.log('Posts Error:', postsError);
+      if (commentsError) throw commentsError;
+      setComments(commentsData || []);
 
-    if (postsError) {
-      console.error('Error fetching posts:', postsError);
-    } else {
-      // Fetch reactions for each post
-      const postsWithReactions = await Promise.all(
-        (postsData || []).map(async (post) => {
-          const { data: reactionsData } = await supabase
-            .from('reactions')
-            .select('type')
-            .eq('post_id', post.id);
-
-          const reactions = {
-            love: reactionsData?.filter(r => r.type === 'love').length || 0,
-            insightful: reactionsData?.filter(r => r.type === 'insightful').length || 0,
-            like: reactionsData?.filter(r => r.type === 'like').length || 0
-          };
-
-          return { ...post, reactions };
-        })
-      );
-
-      setPosts(postsWithReactions);
+      // Load reactions
+      await loadReactions(commentsData || []);
+    } catch (err) {
+      setError(err.message);
+      console.error("Error loading thread:", err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    setLoading(false);
-  };
-
-  const handleSubmitComment = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim() || !session) {
-      alert('Please sign in to comment');
+  async function loadReactions(posts) {
+    if (!posts.length) {
+      setReactions({ like: 0, love: 0, insightful: 0 });
       return;
     }
 
-    const { error } = await supabase
-      .from('posts')
-      .insert([
-        {
+    const postIds = posts.map((p) => p.id);
+
+    // Get all reactions for posts in this thread
+    const { data: reactionsData, error: reactionsError } = await supabase
+      .from("reactions")
+      .select("*")
+      .in("post_id", postIds);
+
+    if (reactionsError) {
+      console.error("Error loading reactions:", reactionsError);
+      return;
+    }
+
+    // Aggregate reaction counts
+    const counts = { like: 0, love: 0, insightful: 0 };
+    const userReactionSet = new Set();
+
+    reactionsData?.forEach((reaction) => {
+      if (reaction.type in counts) {
+        counts[reaction.type]++;
+      }
+      if (currentUser && reaction.user_id === currentUser.id) {
+        userReactionSet.add(reaction.type);
+      }
+    });
+
+    setReactions(counts);
+    setUserReactions(userReactionSet);
+  }
+
+  async function handleReaction(type) {
+    if (!currentUser) {
+      alert("Please sign in to react");
+      return;
+    }
+
+    try {
+      // Create a dummy post for thread-level reactions if needed
+      // Or use the first post in the thread
+      if (comments.length === 0) {
+        alert("Add a comment first to enable reactions");
+        return;
+      }
+
+      const firstPost = comments[0];
+
+      if (userReactions.has(type)) {
+        // Remove reaction
+        const { error } = await supabase
+          .from("reactions")
+          .delete()
+          .eq("post_id", firstPost.id)
+          .eq("user_id", currentUser.id)
+          .eq("type", type);
+
+        if (error) throw error;
+
+        setReactions((prev) => ({
+          ...prev,
+          [type]: Math.max(0, prev[type] - 1),
+        }));
+        setUserReactions((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(type);
+          return newSet;
+        });
+      } else {
+        // Add reaction
+        const { error } = await supabase.from("reactions").insert({
+          post_id: firstPost.id,
+          user_id: currentUser.id,
+          type,
+        });
+
+        if (error) throw error;
+
+        setReactions((prev) => ({ ...prev, [type]: prev[type] + 1 }));
+        setUserReactions((prev) => new Set([...prev, type]));
+      }
+    } catch (err) {
+      console.error("Error handling reaction:", err);
+      alert("Failed to update reaction");
+    }
+  }
+
+  async function handleSubmitComment() {
+    if (!currentUser) {
+      alert("Please sign in to comment");
+      return;
+    }
+
+    if (!newComment.trim()) {
+      alert("Comment cannot be empty");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const { data, error } = await supabase
+        .from("posts")
+        .insert({
           thread_id: threadId,
-          content: newComment,
-          author_id: session.user.id,
-          parent_id: null
-        }
-      ]);
+          author_id: currentUser.id,
+          content: newComment.trim(),
+          sentiment: "neutral",
+          toxicity_score: 0,
+          is_flagged: false,
+        })
+        .select(
+          `
+          *,
+          author:profiles!posts_author_id_fkey(username, trust_score)
+        `
+        )
+        .single();
 
-    if (error) {
-      console.error('Error posting comment:', error);
-    } else {
-      setNewComment('');
-      fetchThreadAndPosts();
+      if (error) throw error;
+
+      setComments((prev) => [...prev, data]);
+      setNewComment("");
+    } catch (err) {
+      console.error("Error submitting comment:", err);
+      alert("Failed to post comment");
+    } finally {
+      setSubmitting(false);
     }
-  };
+  }
 
-  const handleReaction = async (postId, reactionType) => {
-    if (!session) {
-      alert('Please sign in to react');
-      return;
-    }
-
-    // Check if user already reacted
-    const { data: existingReaction } = await supabase
-      .from('reactions')
-      .select('*')
-      .eq('post_id', postId)
-      .eq('user_id', session.user.id)
-      .eq('type', reactionType)
-      .single();
-
-    if (existingReaction) {
-      // Remove reaction
-      await supabase
-        .from('reactions')
-        .delete()
-        .eq('id', existingReaction.id);
-    } else {
-      // Add reaction
-      await supabase
-        .from('reactions')
-        .insert([
-          {
-            post_id: postId,
-            user_id: session.user.id,
-            type: reactionType
-          }
-        ]);
-    }
-
-    fetchThreadAndPosts();
-  };
-
-  const getTimeAgo = (timestamp) => {
+  function formatDate(dateString) {
+    const date = new Date(dateString);
     const now = new Date();
-    const past = new Date(timestamp);
-    const diffInSeconds = Math.floor((now - past) / 1000);
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffInSeconds < 60) return 'just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F3F3F3] flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading thread...</p>
+        </div>
       </div>
     );
   }
 
-  if (!thread) {
+  if (error || !thread) {
     return (
-      <div className="min-h-screen bg-[#F3F3F3] flex items-center justify-center">
-        <div className="text-gray-600">Thread not found</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">Failed to load thread</p>
+          <p className="text-gray-600 mt-2">{error}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F3F3] py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        {/* Thread Card */}
-        <article className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          {/* Thread Header */}
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-blue-400 flex items-center justify-center text-white font-semibold">
-                {thread.profiles?.username?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">
-                  {thread.profiles?.username || 'Anonymous'}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {getTimeAgo(thread.created_at)}
-                </p>
-              </div>
-            </div>
+    <div className="w-[70vw]  bg-gray-50">
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        {/* Thread Header */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">
+            {thread.title}
+          </h1>
+          {thread.description && (
+            <p className="text-gray-700 mb-4">{thread.description}</p>
+          )}
+          <div className="flex items-center text-sm text-gray-500">
+            <span>
+              Posted by{" "}
+              <span className="font-medium">
+                {thread.creator?.username || "Unknown"}
+              </span>
+            </span>
+            <span className="mx-2">•</span>
+            <span>{formatDate(thread.created_at)}</span>
+          </div>
 
-            {/* Thread Title and Content */}
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {thread.title}
-            </h1>
-            <div className="text-gray-700 whitespace-pre-line mb-6">
-              {thread.description}
-            </div>
+          {/* Reactions */}
+          <div className="flex gap-4 mt-6 pt-6 border-t">
+            <button
+              onClick={() => handleReaction("like")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                userReactions.has("like")
+                  ? "bg-red-100 text-red-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              disabled={!currentUser}
+            >
+              <Heart
+                className={`w-5 h-5 ${
+                  userReactions.has("like") ? "fill-current" : ""
+                }`}
+              />
+              <span className="font-medium">{reactions.like}</span>
+            </button>
+            <button
+              onClick={() => handleReaction("love")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                userReactions.has("love")
+                  ? "bg-pink-100 text-pink-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              disabled={!currentUser}
+            >
+              <Sparkles
+                className={`w-5 h-5 ${
+                  userReactions.has("love") ? "fill-current" : ""
+                }`}
+              />
+              <span className="font-medium">{reactions.love}</span>
+            </button>
+            <button
+              onClick={() => handleReaction("insightful")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                userReactions.has("insightful")
+                  ? "bg-yellow-100 text-yellow-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              disabled={!currentUser}
+            >
+              <Lightbulb
+                className={`w-5 h-5 ${
+                  userReactions.has("insightful") ? "fill-current" : ""
+                }`}
+              />
+              <span className="font-medium">{reactions.insightful}</span>
+            </button>
+          </div>
+          {/* AI Summarization */}
+          <div className="mt-6">
+            <button
+              onClick={handleSummarize}
+              disabled={summarizing}
+              className="flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+            >
+              <Brain className="w-5 h-5" />
+              {summarizing ? "Generating Summary..." : "AI Summarization"}
+            </button>
 
-            {/* Summary if available */}
-            {thread.summary && (
-              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
-                <p className="font-semibold text-blue-900 mb-1">AI Summary</p>
-                <p className="text-blue-800">{thread.summary}</p>
+            {aiSummary && (
+              <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 text-gray-800 whitespace-pre-line">
+                <h3 className="font-semibold mb-2 text-gray-700">
+                  AI Summary:
+                </h3>
+                <p>{aiSummary}</p>
               </div>
             )}
-
-            {/* Reactions Bar */}
-            <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 text-gray-600 hover:text-red-500 transition-colors">
-                <Heart className="w-5 h-5" />
-                <span className="font-medium">Love</span>
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-yellow-50 text-gray-600 hover:text-yellow-600 transition-colors">
-                <Lightbulb className="w-5 h-5" />
-                <span className="font-medium">Insightful</span>
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 text-gray-600 hover:text-blue-500 transition-colors">
-                <ThumbsUp className="w-5 h-5" />
-                <span className="font-medium">Like</span>
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors ml-auto">
-                <Share2 className="w-5 h-5" />
-                <span className="font-medium">Share</span>
-              </button>
-            </div>
           </div>
-        </article>
+        </div>
 
         {/* Comments Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <MessageCircle className="w-6 h-6" />
-            Discussion ({posts.length})
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5" />
+            Comments ({comments.length})
           </h2>
 
-          {/* Comment Input */}
-          <div className="mb-6">
-            <div className="flex gap-3">
-              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-white font-semibold flex-shrink-0">
-                {session?.user?.user_metadata?.full_name?.charAt(0).toUpperCase() || 'Y'}
-              </div>
-              <div className="flex-1">
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Share your thoughts..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
-                  rows="3"
-                />
-                <div className="flex justify-end mt-2">
-                  <button
-                    onClick={handleSubmitComment}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-400 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
-                  >
-                    <Send className="w-4 h-4" />
-                    Post Comment
-                  </button>
-                </div>
-              </div>
+          {/* Add Comment */}
+          {currentUser ? (
+            <div className="mb-6">
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Share your thoughts..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows="3"
+              />
+              <button
+                onClick={handleSubmitComment}
+                disabled={submitting || !newComment.trim()}
+                className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              >
+                <Send className="w-4 h-4" />
+                {submitting ? "Posting..." : "Post Comment"}
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg text-center text-gray-600">
+              Please sign in to comment
+            </div>
+          )}
 
           {/* Comments List */}
           <div className="space-y-4">
-            {posts.map((post) => (
-              <div key={post.id} className="flex gap-3 p-4 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="w-10 h-10 rounded-full bg-blue-400 flex items-center justify-center text-white font-semibold flex-shrink-0">
-                  {post.profiles?.username?.charAt(0).toUpperCase() || 'U'}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-gray-900">
-                      {post.profiles?.username || 'Anonymous'}
-                    </p>
-                    <span className="text-sm text-gray-500">
-                      {getTimeAgo(post.created_at)}
-                    </span>
-                    {post.is_flagged && (
-                      <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">
-                        Flagged
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-gray-700 mb-3">
-                    {post.content}
-                  </p>
-                  
-                  {/* Comment Reactions */}
-                  <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => handleReaction(post.id, 'love')}
-                      className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-500 transition-colors"
-                    >
-                      <Heart className="w-4 h-4" />
-                      <span>{post.reactions?.love || 0}</span>
-                    </button>
-                    <button 
-                      onClick={() => handleReaction(post.id, 'insightful')}
-                      className="flex items-center gap-1 text-sm text-gray-500 hover:text-yellow-600 transition-colors"
-                    >
-                      <Lightbulb className="w-4 h-4" />
-                      <span>{post.reactions?.insightful || 0}</span>
-                    </button>
-                    <button 
-                      onClick={() => handleReaction(post.id, 'like')}
-                      className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-500 transition-colors"
-                    >
-                      <ThumbsUp className="w-4 h-4" />
-                      <span>{post.reactions?.like || 0}</span>
-                    </button>
-                    <button className="text-sm text-gray-500 hover:text-blue-500 transition-colors ml-2">
-                      Reply
-                    </button>
+            {comments.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">
+                No comments yet. Be the first to comment!
+              </p>
+            ) : (
+              comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className="border-b border-gray-200 pb-4 last:border-b-0"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                      {comment.author?.username?.charAt(0).toUpperCase() || "?"}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-900">
+                          {comment.author?.username || "Unknown User"}
+                        </span>
+                        {comment.author?.trust_score > 75 && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                            Trusted
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-500">
+                          {formatDate(comment.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-gray-700">{comment.content}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

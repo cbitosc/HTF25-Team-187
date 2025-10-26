@@ -1,5 +1,5 @@
 import { supabase } from "../supabaseClient.js";
-import { summarizeText } from "../utils/gemini.js";
+import { summarizeText } from "../../src/utils/gemini.js";
 import { getToxicityScore } from "../../src/utils/perspective.js";
 
 export async function createPost(req, res) {
