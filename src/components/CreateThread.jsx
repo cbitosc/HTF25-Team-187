@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { getToxicityScore } from "/backend/utils/perspective.js";
+import { getToxicityScore } from "../utils/perspective";
 
 export default function CreateThreadPage() {
   const [session, setSession] = useState(null);

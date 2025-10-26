@@ -1,6 +1,6 @@
-import { supabase } from '../supabaseClient.js';
-import { summarizeText } from '../utils/gemini.js';
-import { getToxicityScore } from '../utils/perspective.js';
+import { supabase } from "../supabaseClient.js";
+import { summarizeText } from "../utils/gemini.js";
+import { getToxicityScore } from "../../src/utils/perspective.js";
 
 export async function createPost(req, res) {
   const { author_id, content, thread_id, parent_id } = req.body;
@@ -12,9 +12,16 @@ export async function createPost(req, res) {
 
     // 2️⃣ Insert post into Supabase
     const { data, error } = await supabase
-      .from('posts')
+      .from("posts")
       .insert([
-        { author_id, content, thread_id, parent_id, toxicity_score: toxicity, is_flagged }
+        {
+          author_id,
+          content,
+          thread_id,
+          parent_id,
+          toxicity_score: toxicity,
+          is_flagged,
+        },
       ])
       .select()
       .single();
@@ -24,7 +31,7 @@ export async function createPost(req, res) {
     res.status(201).json({ post: data, flagged: is_flagged });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to create post' });
+    res.status(500).json({ error: "Failed to create post" });
   }
 }
 
@@ -34,9 +41,9 @@ export async function summarizePost(req, res) {
   try {
     // Fetch post content
     const { data: post, error } = await supabase
-      .from('posts')
-      .select('content')
-      .eq('id', id)
+      .from("posts")
+      .select("content")
+      .eq("id", id)
       .single();
 
     if (error) throw error;
@@ -45,6 +52,6 @@ export async function summarizePost(req, res) {
     res.json({ summary });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to summarize post' });
+    res.status(500).json({ error: "Failed to summarize post" });
   }
 }

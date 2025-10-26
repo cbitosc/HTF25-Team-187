@@ -1,3 +1,8 @@
+console.log(
+  "Perspective API Key:",
+  import.meta.env.VITE_PERSPECTIVE_API_KEY ? "Loaded" : "Missing"
+);
+
 import axios from "axios";
 export async function getToxicityScore(text) {
   try {
