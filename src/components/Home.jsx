@@ -35,6 +35,7 @@ export default function Home() {
           title,
           description,
           created_by,
+          toxicity_score,
           created_at,
           profiles:created_by (username, trust_score)
         `
@@ -265,6 +266,20 @@ export default function Home() {
                     </h2>
                     <p className="text-gray-600 mb-4 leading-relaxed">
                       {truncateDescription(thread.description)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Toxicity:{" "}
+                      <span
+                        className={`font-semibold ${
+                          thread.toxicity_score > 0.7
+                            ? "text-red-500"
+                            : thread.toxicity_score > 0.4
+                            ? "text-yellow-500"
+                            : "text-green-500"
+                        }`}
+                      >
+                        {(thread.toxicity_score * 100).toFixed(1)}%
+                      </span>
                     </p>
 
                     <div className="flex items-center justify-between text-sm">

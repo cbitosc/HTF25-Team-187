@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { getToxicityScore } from "/backend/utils/perspective.js";
 
 export default function CreateThreadPage() {
   const [session, setSession] = useState(null);
@@ -55,20 +56,25 @@ export default function CreateThreadPage() {
     setSubmitting(true);
 
     try {
-      // 1️⃣ Create the thread
+      // 1️⃣ Calculate toxicity score
+      const combinedText = `${formData.title} ${formData.description}`;
+      const toxicityScore = await getToxicityScore(combinedText);
+
+      // 2️⃣ Create the thread with toxicity score
       const { data: thread, error: threadError } = await supabase
         .from("threads")
         .insert({
           title: formData.title.trim(),
           description: formData.description.trim(),
           created_by: session.user.id,
+          toxicity_score: toxicityScore, // ✅ Added field
         })
         .select()
         .single();
 
       if (threadError) throw threadError;
 
-      // 2️⃣ Immediately create a root post tied to this thread
+      // 3️⃣ Create root post linked to thread
       const { error: postError } = await supabase.from("posts").insert({
         thread_id: thread.id,
         author_id: session.user.id,
@@ -77,8 +83,9 @@ export default function CreateThreadPage() {
 
       if (postError) throw postError;
 
-      // 3️⃣ Show success animation
+      // 4️⃣ Show success
       setShowSuccess(true);
+      setSubmitting(false);
     } catch (error) {
       console.error("Error creating thread or post:", error);
       setSubmitting(false);
