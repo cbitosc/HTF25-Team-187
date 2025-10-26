@@ -4,12 +4,14 @@ import { supabase } from "../lib/supabaseClient";
 export default function Home() {
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userReactions, setUserReactions] = useState({});
-  const [currentUser, setCurrentUser] = useState(null);
+  const [userId, setUserId] = useState(null);
 
   useEffect(() => {
-    getCurrentUser();
-    fetchThreads();
+    const init = async () => {
+      await getCurrentUser();
+      await fetchThreads();
+    };
+    init();
   }, []);
 
   const getCurrentUser = async () => {
@@ -17,7 +19,7 @@ export default function Home() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      setCurrentUser(session?.user || null);
+      setUserId(session?.user?.id || null);
     } catch (error) {
       console.error("Error fetching current user:", error);
     }
@@ -41,39 +43,25 @@ export default function Home() {
 
       if (threadsError) throw threadsError;
 
-      const shuffledThreads = threadsData.sort(() => Math.random() - 0.5);
-
-      const threadsWithCounts = await Promise.all(
-        shuffledThreads.map(async (thread) => {
+      const threadsWithData = await Promise.all(
+        threadsData.map(async (thread) => {
           const { count: repliesCount } = await supabase
             .from("posts")
             .select("id", { count: "exact", head: true })
             .eq("thread_id", thread.id);
 
-          const { data: postsData } = await supabase
-            .from("posts")
-            .select("id")
-            .eq("thread_id", thread.id);
-
-          let reactionsCount = 0;
-          if (postsData && postsData.length > 0) {
-            const postIds = postsData.map((p) => p.id);
-            const { count } = await supabase
-              .from("reactions")
-              .select("id", { count: "exact", head: true })
-              .in("post_id", postIds);
-            reactionsCount = count || 0;
-          }
+          const reactions = await fetchReactions(thread.id);
 
           return {
             ...thread,
             repliesCount: repliesCount || 0,
-            reactionsCount,
+            reactions: reactions.counts,
+            userReactions: reactions.userReactions,
           };
         })
       );
 
-      setThreads(threadsWithCounts);
+      setThreads(threadsWithData);
     } catch (error) {
       console.error("Error fetching threads:", error);
     } finally {
@@ -81,69 +69,129 @@ export default function Home() {
     }
   };
 
-  const handleThreadClick = (threadId) => {
-    window.location.href = `/thread/${threadId}`;
+  const fetchReactions = async (threadId) => {
+    try {
+      const { data: posts } = await supabase
+        .from("posts")
+        .select("id")
+        .eq("thread_id", threadId);
+
+      if (!posts || posts.length === 0) {
+        return {
+          counts: { like: 0, love: 0, insightful: 0 },
+          userReactions: { like: false, love: false, insightful: false },
+        };
+      }
+
+      const postIds = posts.map((p) => p.id);
+
+      const { data: reactionsData, error } = await supabase
+        .from("reactions")
+        .select("id, type, user_id, post_id")
+        .in("post_id", postIds);
+
+      if (error) throw error;
+
+      const counts = { like: 0, love: 0, insightful: 0 };
+      const userReactions = { like: false, love: false, insightful: false };
+
+      if (reactionsData) {
+        reactionsData.forEach((reaction) => {
+          if (counts.hasOwnProperty(reaction.type)) {
+            counts[reaction.type]++;
+          }
+          if (reaction.user_id === userId) {
+            userReactions[reaction.type] = true;
+          }
+        });
+      }
+
+      return { counts, userReactions };
+    } catch (error) {
+      console.error("Error fetching reactions:", error);
+      return {
+        counts: { like: 0, love: 0, insightful: 0 },
+        userReactions: { like: false, love: false, insightful: false },
+      };
+    }
   };
 
-  const handleReaction = async (threadId, reactionType) => {
-    if (!currentUser) {
+  const toggleReaction = async (threadId, type) => {
+    if (!userId) {
       alert("Please sign in to react");
       return;
     }
 
     try {
-      const { data: postsData } = await supabase
+      // ✅ Step 1: Get any one post from this thread (since reactions link to posts)
+      const { data: posts, error: postsError } = await supabase
         .from("posts")
         .select("id")
         .eq("thread_id", threadId)
         .limit(1);
 
-      if (!postsData || postsData.length === 0) {
-        console.error("No posts found for this thread");
+      if (postsError) throw postsError;
+
+      if (!posts || posts.length === 0) {
+        console.warn("No posts found for this thread. Cannot react.");
         return;
       }
 
-      const postId = postsData[0].id;
-      const reactionKey = `${threadId}-${reactionType}`;
+      const postId = posts[0].id;
 
-      if (userReactions[reactionKey]) {
-        await supabase
+      // ✅ Step 2: Check if user already reacted
+      const { data: existingReaction, error: fetchError } = await supabase
+        .from("reactions")
+        .select("id")
+        .eq("post_id", postId)
+        .eq("user_id", userId)
+        .eq("type", type)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      // ✅ Step 3: Toggle reaction
+      if (existingReaction) {
+        const { error: deleteError } = await supabase
           .from("reactions")
           .delete()
-          .eq("post_id", postId)
-          .eq("user_id", currentUser.id)
-          .eq("type", reactionType);
+          .eq("id", existingReaction.id);
 
-        setUserReactions((prev) => ({ ...prev, [reactionKey]: false }));
+        if (deleteError) throw deleteError;
       } else {
-        await supabase.from("reactions").insert({
-          post_id: postId,
-          user_id: currentUser.id,
-          type: reactionType,
+        const { error: insertError } = await supabase.from("reactions").insert({
+          post_id: postId, // valid post id
+          user_id: userId,
+          type: type,
         });
 
-        setUserReactions((prev) => ({ ...prev, [reactionKey]: true }));
+        if (insertError) throw insertError;
       }
 
-      fetchThreads();
+      // ✅ Step 4: Refresh threads to reflect new counts
+      await fetchThreads();
     } catch (error) {
-      console.error("Error handling reaction:", error);
+      console.error("Error toggling reaction:", error);
     }
+  };
+
+  const handleThreadClick = (threadId) => {
+    window.location.href = `/thread/${threadId}`;
   };
 
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const formattedHours = hours % 12 || 12;
+    const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
 
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    const day = date.getDate();
+    const month = date.toLocaleString("default", { month: "short" });
+    const year = date.getFullYear();
+
+    return `${month} ${day}, ${year} at ${formattedHours}:${formattedMinutes} ${ampm}`;
   };
 
   const truncateDescription = (text, maxLength = 150) => {
@@ -154,14 +202,14 @@ export default function Home() {
 
   return (
     <div
-      className="flex min-h-screen bg-[#F3F3F3]"
+      className="flex w-full bg-[#F3F3F3]"
       style={{
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
       }}
     >
-      <main className="flex-1 lg:ml-64 pt-20 pb-8 px-4">
-        <div className="max-w-2xl mx-auto">
+      <main className="w-[63vw] flex-1 lg:ml-64 pt-20 pb-8 px-4">
+        <div className="max-w-2xl">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Feed</h1>
             <p className="text-gray-600">
@@ -206,9 +254,12 @@ export default function Home() {
               {threads.map((thread) => (
                 <div
                   key={thread.id}
-                  className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer border border-gray-100"
+                  className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100"
                 >
-                  <div onClick={() => handleThreadClick(thread.id)}>
+                  <div
+                    onClick={() => handleThreadClick(thread.id)}
+                    className="cursor-pointer"
+                  >
                     <h2 className="text-xl font-bold text-gray-900 mb-2 hover:text-blue-600 transition-colors">
                       {thread.title}
                     </h2>
@@ -251,24 +302,6 @@ export default function Home() {
                             {thread.repliesCount}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                            />
-                          </svg>
-                          <span className="font-medium">
-                            {thread.reactionsCount}
-                          </span>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -278,75 +311,39 @@ export default function Home() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
-                      onClick={() => handleReaction(thread.id, "like")}
-                      className={`flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                        userReactions[`${thread.id}-like`]
-                          ? "bg-[#A5D0FF] text-gray-900"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      onClick={() => toggleReaction(thread.id, "like")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border ${
+                        thread.userReactions?.like
+                          ? "bg-[#A5D0FF] text-gray-900 border-[#A5D0FF]"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
                       }`}
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"
-                        />
-                      </svg>
-                      Like
+                      <span className="text-base">👍</span>
+                      <span>{thread.reactions?.like || 0}</span>
                     </button>
 
                     <button
-                      onClick={() => handleReaction(thread.id, "love")}
-                      className={`flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                        userReactions[`${thread.id}-love`]
-                          ? "bg-[#A5D0FF] text-gray-900"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      onClick={() => toggleReaction(thread.id, "love")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border ${
+                        thread.userReactions?.love
+                          ? "bg-[#A5D0FF] text-gray-900 border-[#A5D0FF]"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
                       }`}
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                        />
-                      </svg>
-                      Love
+                      <span className="text-base">❤️</span>
+                      <span>{thread.reactions?.love || 0}</span>
                     </button>
 
                     <button
-                      onClick={() => handleReaction(thread.id, "insightful")}
-                      className={`flex items-center gap-1 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                        userReactions[`${thread.id}-insightful`]
-                          ? "bg-[#A5D0FF] text-gray-900"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      onClick={() => toggleReaction(thread.id, "insightful")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border ${
+                        thread.userReactions?.insightful
+                          ? "bg-[#A5D0FF] text-gray-900 border-[#A5D0FF]"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
                       }`}
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                        />
-                      </svg>
-                      Insightful
+                      <span className="text-base">💡</span>
+                      <span>{thread.reactions?.insightful || 0}</span>
                     </button>
                   </div>
                 </div>

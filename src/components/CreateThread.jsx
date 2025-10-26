@@ -48,30 +48,39 @@ export default function CreateThreadPage() {
       console.error("Error signing in:", error);
     }
   };
-
   const handleSubmit = async () => {
-    if (!formData.title.trim() || !formData.description.trim()) {
-      return;
-    }
-
-    if (formData.title.length > 100) {
-      return;
-    }
+    if (!formData.title.trim() || !formData.description.trim()) return;
+    if (formData.title.length > 100) return;
 
     setSubmitting(true);
 
     try {
-      const { error } = await supabase.from("threads").insert({
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        created_by: session.user.id,
+      // 1️⃣ Create the thread
+      const { data: thread, error: threadError } = await supabase
+        .from("threads")
+        .insert({
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          created_by: session.user.id,
+        })
+        .select()
+        .single();
+
+      if (threadError) throw threadError;
+
+      // 2️⃣ Immediately create a root post tied to this thread
+      const { error: postError } = await supabase.from("posts").insert({
+        thread_id: thread.id,
+        author_id: session.user.id,
+        content: formData.description.trim(),
       });
 
-      if (error) throw error;
+      if (postError) throw postError;
 
+      // 3️⃣ Show success animation
       setShowSuccess(true);
     } catch (error) {
-      console.error("Error creating thread:", error);
+      console.error("Error creating thread or post:", error);
       setSubmitting(false);
     }
   };
