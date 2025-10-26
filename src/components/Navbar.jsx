@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function Navbar({ onSearch }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
   // Fetch current session on mount
   useEffect(() => {
     const initSession = async () => {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
       setSession(currentSession);
       setLoading(false);
 
@@ -22,9 +24,11 @@ export default function Navbar({ onSearch }) {
     initSession();
 
     // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      
+
       if (newSession?.user) {
         fetchProfile(newSession.user.id);
       } else {
@@ -41,17 +45,17 @@ export default function Navbar({ onSearch }) {
   // Fetch user profile from database
   const fetchProfile = async (userId) => {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('username, trust_score')
-      .eq('id', userId)
+      .from("profiles")
+      .select("username, trust_score")
+      .eq("id", userId)
       .single();
 
     if (error) {
-      console.error('Error fetching profile:', error);
+      console.error("Error fetching profile:", error);
       // Fallback to email-derived username
       setProfile({
-        username: session?.user?.email?.split('@')[0] || 'User',
-        trust_score: null
+        username: session?.user?.email?.split("@")[0] || "User",
+        trust_score: null,
       });
     } else {
       setProfile(data);
@@ -72,9 +76,9 @@ export default function Navbar({ onSearch }) {
   // Handle sign in
   const handleSignIn = async () => {
     try {
-      await supabase.auth.signInWithOAuth({ provider: 'google' });
+      await supabase.auth.signInWithOAuth({ provider: "google" });
     } catch (error) {
-      console.error('Error signing in:', error);
+      console.error("Error signing in:", error);
     }
   };
 
@@ -84,7 +88,7 @@ export default function Navbar({ onSearch }) {
       await supabase.auth.signOut();
       setProfile(null);
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
   };
 
@@ -96,16 +100,20 @@ export default function Navbar({ onSearch }) {
     if (session?.user?.email) {
       return session.user.email.substring(0, 1).toUpperCase();
     }
-    return 'U';
+    return "U";
   };
 
   const avatarUrl = session?.user?.user_metadata?.avatar_url;
-  const displayUsername = profile?.username || session?.user?.email?.split('@')[0] || 'User';
+  const displayUsername =
+    profile?.username || session?.user?.email?.split("@")[0] || "User";
 
   return (
-    <nav 
+    <nav
       className="fixed top-0 left-0 w-full z-50 bg-[#F3F3F3] backdrop-blur-sm shadow-sm py-3 px-6"
-      style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif' }}
+      style={{
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+      }}
     >
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between gap-4 md:gap-8">
@@ -157,11 +165,12 @@ export default function Navbar({ onSearch }) {
                   <span className="text-gray-900 text-sm font-medium">
                     {displayUsername}
                   </span>
-                  {profile?.trust_score !== null && profile?.trust_score !== undefined && (
-                    <span className="bg-[#F1F9FF] text-[#A5D0FF] px-2 py-0.5 text-xs rounded-full border border-[#E6F0FF]">
-                      Trust: {profile.trust_score}
-                    </span>
-                  )}
+                  {profile?.trust_score !== null &&
+                    profile?.trust_score !== undefined && (
+                      <span className="bg-[#F1F9FF] text-[#A5D0FF] px-2 py-0.5 text-xs rounded-full border border-[#E6F0FF]">
+                        Trust: {profile.trust_score}
+                      </span>
+                    )}
                 </div>
 
                 {/* Sign Out Button */}
@@ -172,8 +181,18 @@ export default function Navbar({ onSearch }) {
                 >
                   <span className="hidden md:inline">Sign out</span>
                   <span className="md:hidden">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
                     </svg>
                   </span>
                 </button>
